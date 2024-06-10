@@ -28,6 +28,9 @@
       "@components/*": [
         "src/components/*"
       ],
+      "@utils/*": [
+        "src/utils/*"
+      ],      
       /*"@config/*": [
         "src/config/*"
       ],
@@ -42,9 +45,6 @@
       ],
       "types/*": [
         "src/types/*"
-      ],
-      "@utils/*": [
-        "src/utils/*"
       ], */
     }
   },
