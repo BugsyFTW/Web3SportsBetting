@@ -48,11 +48,14 @@ contract SportPrediction is ResultsConsumer {
   }
 
   event Predicted(address indexed user, uint256 indexed gameId, Result result, uint256 amount);
+  event GameRegistered(uint256 indexed gameId);
 
   error GameNotRegistered();
   error GameIsResolved();
   error GameAlreadyStarted();
   error InvalidResult();
+  error GameAlreadyRegistered();
+  error TimestampInPast();
 
   constructor(
     Config memory config
@@ -84,6 +87,27 @@ contract SportPrediction is ResultsConsumer {
 
     predictions[msg.sender][gameId].push(Prediction(gameId, result, wagerAmount, false));
     emit Predicted(msg.sender, gameId, result, wagerAmount);
-    
+  }
+
+  function _registerGame(uint256 sportId, uint256 externalId, uint256 timestamp) internal returns(uint256 gameId) {
+    gameId = getGameId(sportId, externalId);
+
+    //Check if game can be registered
+    if (games[gameId].externalId != 0) revert GameAlreadyRegistered();
+    if (timestamp < block.timestamp) revert TimestampInPast();
+
+    games[gameId] = Game(sportId, externalId, timestamp, 0, 0, false, Result.None);
+    activeGames.push(gameId);
+
+    emit GameRegistered(gameId);
+  }
+
+  /// Get the ID of a game used in the contract
+  /// @param sportId The ID of the sport
+  /// @param externalId The ID of the game on the external sports API
+  /// @return gameId The ID of the game used in the contract
+  /// The game ID is a unique number combining of the sport ID and the external ID
+  function getGameId(uint256 sportId, uint256 externalId) public pure returns(uint256) {
+    return (sportId << 128) | externalId;
   }
 }
