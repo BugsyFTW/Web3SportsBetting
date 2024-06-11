@@ -28,9 +28,15 @@
       "@components/*": [
         "src/components/*"
       ],
+      "@api/*": [
+        "src/services/api/*"
+      ],
+      "types/*": [
+        "src/types/*"
+      ],
       "@utils/*": [
         "src/utils/*"
-      ],      
+      ],
       /*"@config/*": [
         "src/config/*"
       ],
