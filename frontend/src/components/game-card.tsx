@@ -17,10 +17,37 @@ import { Team } from "@/types";
 interface GameCardProps {
   home: Team;
   away: Team;
-  date: string;
+  date: Date;
 }
 
 export function GameCard({ home, away, date }: GameCardProps) {
+
+  const formatDate = (date: Date) => {
+    // Format the date part
+    const dateOptions: Intl.DateTimeFormatOptions = {
+      weekday: 'long',
+      month: 'long',
+      day: 'numeric',
+    };
+
+    const formattedDate = date.toLocaleDateString('en-US', dateOptions);
+
+    // Format the time part
+    const timeOptions: Intl.DateTimeFormatOptions = {
+      hour: 'numeric',
+      minute: 'numeric',
+      hour12: true,
+    };
+
+    const formattedTime = date.toLocaleTimeString('en-US', timeOptions);
+
+    // Combine date and time with the desired separator
+    return `${formattedDate} @ ${formattedTime}`;
+  };
+
+  // Ensure date is a Date object
+  const dateObj = typeof date === 'string' ? new Date(date) : date;
+
   return (
     <Card className="w-[450px]">
       <CardHeader className="flex items-center">
@@ -29,7 +56,7 @@ export function GameCard({ home, away, date }: GameCardProps) {
           {home.name} x {away.name}
           <TeamCrest className="ml-4" crest={away.crest} shortName={away.shortName} />
         </CardTitle>
-        <CardDescription>{date}</CardDescription>
+        <CardDescription>{formatDate(dateObj)}</CardDescription>
         <Separator />
       </CardHeader>
       <CardContent className="flex justify-between">

@@ -33,8 +33,8 @@ export function GameList({ matchday }: GameListProps) {
   return (
     <>
       {
-        games?.matches.map((game) => (
-          <GameCard home={game.homeTeam} away={game.awayTeam} date={game.utcDate} />
+        games?.matches.map((game, index) => (
+          <GameCard home={game.homeTeam} away={game.awayTeam} date={game.utcDate} key={index} />
         ))
       }
     </>

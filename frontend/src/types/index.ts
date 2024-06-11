@@ -36,7 +36,7 @@ export interface Match {
   competition: Competition
   season: Season
   id: number
-  utcDate: string
+  utcDate: Date
   status: string
   matchday: number
   stage: string
