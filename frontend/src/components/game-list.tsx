@@ -18,7 +18,6 @@ export function GameList({ matchday }: GameListProps) {
         const result = await getGames(matchday);
         controller = result.controller;
         setGames(result.data);
-        console.log(result.data);
       } catch (error) {
         console.error("Error fetching games: ", error);
       }
@@ -35,7 +34,7 @@ export function GameList({ matchday }: GameListProps) {
     <>
       {
         games?.matches.map((game) => (
-          <GameCard home={game.homeTeam.name} away={game.awayTeam.name} date={game.utcDate} />
+          <GameCard home={game.homeTeam} away={game.awayTeam} date={game.utcDate} />
         ))
       }
     </>

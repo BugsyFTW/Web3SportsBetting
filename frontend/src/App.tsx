@@ -1,8 +1,11 @@
+import { useState } from "react";
 import { ThemeProvider } from "@components/theme-provider";
 import { createWeb3Modal, defaultConfig } from "@web3modal/ethers/react";
 
-import { Navbar } from "./components/navbar"; "@components/navbar";
+import { Navbar } from "@components/navbar";
 import { GameList } from "@components/game-list";
+import { Input } from "@components/ui/input";
+import { ModeToggle } from "@components/mode-toggle";
 
 const projectId = '557a8ff268dfaf2fc232c9bb81c11e47';
 
@@ -45,10 +48,18 @@ createWeb3Modal({
 });
 
 function App() {
+
+  const [matchday, setMatchday] = useState(1);
+
+  const handleMatchdayChange = (e: any) => {
+    setMatchday(e.target.value);
+  };
+
   return (
     <ThemeProvider defaultTheme="dark" storageKey="wb3sptsbt">
       <Navbar />
-      <GameList matchday={1} />
+      {/*<Input value={matchday} onChange={handleMatchdayChange} min={1} type="number" id="matchday-input" />*/}
+      <GameList matchday={matchday} />
     </ThemeProvider>
   );
 }
