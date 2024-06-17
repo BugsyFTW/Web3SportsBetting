@@ -3,12 +3,23 @@
  * https://api.football-data.org
  * 
  */
-
 export interface FootballData {
   filters: Filters
   resultSet: ResultSet
   competition: Competition
   matches: Match[]
+}
+
+export interface CompetitionData {
+  area: Area
+  id: number
+  name: string
+  code: string
+  type: string
+  emblem: string
+  currentSeason: Season
+  seasons: Season[]
+  lastUpdated: string
 }
 
 export interface Filters {
@@ -85,4 +96,18 @@ export interface TimeScore {
 
 export interface Odds {
   msg: string
+}
+
+export interface Winner {
+  id: number
+  name: string
+  shortName?: string
+  tla?: string
+  crest: string
+  address: string
+  website?: string
+  founded?: number
+  clubColors?: string
+  venue?: string
+  lastUpdated: string
 }

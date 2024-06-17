@@ -15,7 +15,8 @@ export function GameList({ matchday }: GameListProps) {
     let controller: AbortController;
     const fetchGames = async () => {
       try {
-        const result = await getGames(matchday);
+        const todayDate = new Date();
+        const result = await getGames(matchday, todayDate, todayDate);
         controller = result.controller;
         setGames(result.data);
       } catch (error) {
