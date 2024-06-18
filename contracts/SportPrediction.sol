@@ -127,7 +127,7 @@ contract SportPrediction is ResultsConsumer {
     games[gameId].resolved = true;
 
     resolvedGames.push(gameId);
-
+    _removeFromActiveGames(gameId);
     
     emit GameResolved(gameId, result);
   }
