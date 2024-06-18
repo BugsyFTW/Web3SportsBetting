@@ -111,3 +111,14 @@ export interface Winner {
   venue?: string
   lastUpdated: string
 }
+
+export enum MatchStatus {
+  SCHEDULED,
+  LIVE,
+  IN_PLAY,
+  PAUSED,
+  FINISHED,
+  POSTPONED,
+  SUSPENDED,
+  CANCELLED
+}

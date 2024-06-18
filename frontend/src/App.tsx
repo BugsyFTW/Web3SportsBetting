@@ -7,11 +7,13 @@ import { GameList } from "@components/game-list";
 // Initialize the Web3Modal instance
 initWeb3Modal();
 
-function App() {  
+function App() {
   return (
     <ThemeProvider defaultTheme="dark" storageKey="wb3sptsbt">
       <Navbar />
-      <GameList matchday={1} />
+      <div className="flex flex-col items-center gap-16 m-16">
+        <GameList />
+      </div>
     </ThemeProvider>
   );
 }
