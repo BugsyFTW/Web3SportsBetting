@@ -18,6 +18,8 @@ contract SportPrediction is ResultsConsumer {
   mapping(uint256 => Game) private games;
   // Mapping of the user addresses to game ID's to predictions
   mapping(address => mapping(uint256 => Prediction[])) private predictions;
+  // Mapping to store the index of each gameId in the activeGames array.
+  mapping(uint256 => uint256) gameIndex;
 
   // List of game ID's that have not been resolved
   uint256[] private activeGames;
@@ -49,6 +51,7 @@ contract SportPrediction is ResultsConsumer {
 
   event Predicted(address indexed user, uint256 indexed gameId, Result result, uint256 amount);
   event GameRegistered(uint256 indexed gameId);
+  event GameResolved(uint256 indexed gameId, Result result);
 
   error GameNotRegistered();
   error GameIsResolved();
@@ -89,6 +92,15 @@ contract SportPrediction is ResultsConsumer {
     emit Predicted(msg.sender, gameId, result, wagerAmount);
   }
 
+  /// @notice Register a game and predict the result in one transaction
+  function registerAndPredict(uint256 sportId, uint256 externalId, uint256 timestamp, Result result) external payable {
+    uint256 gameId = _registerGame(sportId, externalId, timestamp);
+    predict(gameId, result);
+  }
+
+/// --------------------------------------------------------------------------------- INTERNAL ------------------------------------------------------------------------------------  
+
+  /// @notice Register a game in the contract
   function _registerGame(uint256 sportId, uint256 externalId, uint256 timestamp) internal returns(uint256 gameId) {
     gameId = getGameId(sportId, externalId);
 
@@ -98,8 +110,41 @@ contract SportPrediction is ResultsConsumer {
 
     games[gameId] = Game(sportId, externalId, timestamp, 0, 0, false, Result.None);
     activeGames.push(gameId);
+    gameIndex[gameId] = activeGames.length - 1;
 
     emit GameRegistered(gameId);
+  }
+
+  function _processResult(uint256 sportId, uint256 externalId, bytes memory response) internal override {
+    uint256 gameId = getGameId(sportId, externalId);
+    Result result = Result(uint256(bytes32(response)));
+    _resolveGame(gameId, result);
+  }
+
+  /// @notice Resolve a game with a final result
+  function _resolveGame(uint256 gameId, Result result) internal {
+    games[gameId].result = result;
+    games[gameId].resolved = true;
+
+    resolvedGames.push(gameId);
+
+    
+    emit GameResolved(gameId, result);
+  }
+
+  function _removeFromActiveGames(uint256 gameId) internal {
+    uint256 index = gameIndex[gameId];
+    uint256 lastGameId = activeGames[activeGames.length - 1];
+
+    // Move the last element to the index of the element to delete
+    activeGames[index] = lastGameId;
+    gameIndex[lastGameId] = index;
+
+    //Remove the last element
+    activeGames.pop();
+
+    //Delete the index entry for the removed element
+    delete gameIndex[gameId];
   }
 
   /// Get the ID of a game used in the contract
