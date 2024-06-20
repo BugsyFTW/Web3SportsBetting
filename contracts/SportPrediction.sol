@@ -2,6 +2,7 @@
 pragma solidity ^0.8.0;
 
 import { ResultsConsumer } from "./ResultsConsumer.sol";
+import { AutomationCompatibleInterface } from "@chainlink/contracts/src/v0.8/automation/AutomationCompatible.sol";
 
 /// Configuration parameters for initializing the contract
 struct Config {
@@ -12,14 +13,18 @@ struct Config {
     string source; // The source code for the Chainlink Functions request
 }
 
-contract SportPrediction is ResultsConsumer {
+contract SportPrediction is ResultsConsumer, AutomationCompatibleInterface {
 
-  // Mapping of the game ID's to game data
+  uint256 private constant GAME_RESOLVE_DELAY = 5 minutes;
+
+  // Mapping of the External ID's to game data
   mapping(uint256 => Game) private games;
-  // Mapping of the user addresses to game ID's to predictions
+  // Mapping of the user addresses to External ID's to predictions
   mapping(address => mapping(uint256 => Prediction[])) private predictions;
-  // Mapping to store the index of each gameId in the activeGames array.
+  // Mapping to store the index of each externalId in the activeGames array.
   mapping(uint256 => uint256) gameIndex;
+  // Mapping of External IDs to Chainlink Functions request IDs
+  mapping(uint256 => bytes32) private pendingRequests;
 
   // List of game ID's that have not been resolved
   uint256[] private activeGames;
@@ -27,7 +32,6 @@ contract SportPrediction is ResultsConsumer {
   uint256[] private resolvedGames;
 
   struct Game {
-    uint256 sportId;
     uint256 externalId; // The ID of the game from the external api: Might need to change the type
     uint256 timestamp; // The timestamp of the game start time
     uint256 homeWagerAmmount; // The total ammount of tokens wagared on the home team;
@@ -37,7 +41,7 @@ contract SportPrediction is ResultsConsumer {
   }
 
   struct Prediction {
-    uint256 gameId; // The ID of the game
+    uint256 externalId; // The ID of the game
     Result result; // The predicted result
     uint256 ammount; // the ammount of tokens wagered
     bool claimed; // Weather or not the winning have been claimed
@@ -49,9 +53,9 @@ contract SportPrediction is ResultsConsumer {
     Away
   }
 
-  event Predicted(address indexed user, uint256 indexed gameId, Result result, uint256 amount);
-  event GameRegistered(uint256 indexed gameId);
-  event GameResolved(uint256 indexed gameId, Result result);
+  event Predicted(address indexed user, uint256 indexed externalId, Result result, uint256 amount);
+  event GameRegistered(uint256 indexed externalId);
+  event GameResolved(uint256 indexed externalId, Result result);
 
   error GameNotRegistered();
   error GameIsResolved();
@@ -59,6 +63,8 @@ contract SportPrediction is ResultsConsumer {
   error InvalidResult();
   error GameAlreadyRegistered();
   error TimestampInPast();
+  error ResolveAlreadyRequested();
+  error GameNotReadyToResolve();
 
   constructor(
     Config memory config
@@ -72,68 +78,81 @@ contract SportPrediction is ResultsConsumer {
       )
   {}
 
-  /// Predict the result of a game with native tokens
-  /// gameId The ID of the game
-  /// result The predicted result
-  /// The game must be registered, not resolved, and not started
-  function predict(uint256 gameId, Result result) public payable {
-    Game memory game = games[gameId];
+  /// @notice Predict the result of a game with native tokens
+  /// @dev The game must be registered, not resolved, and not started
+  function predict(uint256 externalId, Result result) public payable {
+    Game memory game = games[externalId];
     uint256 wagerAmount = msg.value;
 
     if (game.externalId == 0) revert GameNotRegistered();
     if (game.resolved) revert GameIsResolved();
     if (game.timestamp < block.timestamp) revert GameAlreadyStarted();
 
-    if (result == Result.Home) games[gameId].homeWagerAmmount += wagerAmount;
-    else if (result == Result.Away) games[gameId].awayWagerAmmout += wagerAmount;
+    if (result == Result.Home) games[externalId].homeWagerAmmount += wagerAmount;
+    else if (result == Result.Away) games[externalId].awayWagerAmmout += wagerAmount;
     else revert InvalidResult();
 
-    predictions[msg.sender][gameId].push(Prediction(gameId, result, wagerAmount, false));
-    emit Predicted(msg.sender, gameId, result, wagerAmount);
+    predictions[msg.sender][externalId].push(Prediction(externalId, result, wagerAmount, false));
+    emit Predicted(msg.sender, externalId, result, wagerAmount);
   }
 
   /// @notice Register a game and predict the result in one transaction
-  function registerAndPredict(uint256 sportId, uint256 externalId, uint256 timestamp, Result result) external payable {
-    uint256 gameId = _registerGame(sportId, externalId, timestamp);
-    predict(gameId, result);
+  function registerAndPredict(uint256 externalId, uint256 timestamp, Result result) external payable {
+    _registerGame(externalId, timestamp);
+    predict(externalId, result);
   }
 
-/// --------------------------------------------------------------------------------- INTERNAL ------------------------------------------------------------------------------------  
+  /// --------------------------------------------------------------------------------- INTERNAL ------------------------------------------------------------------------------------  
 
   /// @notice Register a game in the contract
-  function _registerGame(uint256 sportId, uint256 externalId, uint256 timestamp) internal returns(uint256 gameId) {
-    gameId = getGameId(sportId, externalId);
-
+  function _registerGame(uint256 externalId, uint256 timestamp) internal {
     //Check if game can be registered
-    if (games[gameId].externalId != 0) revert GameAlreadyRegistered();
+    if (games[externalId].externalId != 0) revert GameAlreadyRegistered();
     if (timestamp < block.timestamp) revert TimestampInPast();
 
-    games[gameId] = Game(sportId, externalId, timestamp, 0, 0, false, Result.None);
-    activeGames.push(gameId);
-    gameIndex[gameId] = activeGames.length - 1;
+    games[externalId] = Game(externalId, timestamp, 0, 0, false, Result.None);
+    activeGames.push(externalId);
+    gameIndex[externalId] = activeGames.length - 1;
 
-    emit GameRegistered(gameId);
+    emit GameRegistered(externalId);
   }
 
-  function _processResult(uint256 sportId, uint256 externalId, bytes memory response) internal override {
-    uint256 gameId = getGameId(sportId, externalId);
+  /// @notice Process the result of a game from an external Football API
+  /// @dev Called back from the ResultsConsumer contract when the result is received
+  function _processResult(uint256 externalId, bytes memory response) internal override {
     Result result = Result(uint256(bytes32(response)));
-    _resolveGame(gameId, result);
+    _resolveGame(externalId, result);
   }
 
   /// @notice Resolve a game with a final result
-  function _resolveGame(uint256 gameId, Result result) internal {
-    games[gameId].result = result;
-    games[gameId].resolved = true;
+  function _resolveGame(uint256 externalId, Result result) internal {
+    games[externalId].result = result;
+    games[externalId].resolved = true;
 
-    resolvedGames.push(gameId);
-    _removeFromActiveGames(gameId);
+    resolvedGames.push(externalId);
+    _removeFromActiveGames(externalId);
     
-    emit GameResolved(gameId, result);
+    emit GameResolved(externalId, result);
   }
 
-  function _removeFromActiveGames(uint256 gameId) internal {
-    uint256 index = gameIndex[gameId];
+  /// @notice Requests the result of a game from the external Football API
+  /// @dev Uses Chainlink Functions via the ResultsConsumer contract
+  function _requestResolve(uint256 externalId) internal {
+    Game memory game = games[externalId];
+
+    // Checking if game can be resolved
+    if (pendingRequests[externalId] != 0) revert ResolveAlreadyRequested();
+    if (game.externalId == 0) revert GameNotRegistered();
+    if (game.resolved) revert GameIsResolved();
+    if (!readyToBeResolved(externalId)) revert GameNotReadyToResolve();
+
+    // Request the result of the game via ResultsConsumer contract
+    // Store the Chainlink Functions request ID to prevent duplicate requests
+    pendingRequests[externalId] = _requestResult(game.externalId);
+  }
+
+  function _removeFromActiveGames(uint256 externalId) internal {
+    uint256 index = gameIndex[externalId];
     uint256 lastGameId = activeGames[activeGames.length - 1];
 
     // Move the last element to the index of the element to delete
@@ -144,15 +163,47 @@ contract SportPrediction is ResultsConsumer {
     activeGames.pop();
 
     //Delete the index entry for the removed element
-    delete gameIndex[gameId];
+    delete gameIndex[externalId];
   }
 
-  /// Get the ID of a game used in the contract
-  /// @param sportId The ID of the sport
-  /// @param externalId The ID of the game on the external sports API
-  /// @return gameId The ID of the game used in the contract
-  /// The game ID is a unique number combining of the sport ID and the external ID
-  function getGameId(uint256 sportId, uint256 externalId) public pure returns(uint256) {
-    return (sportId << 128) | externalId;
+  /// @notice Get the data of a certain game
+  function getGame(uint256 externalId) external view returns (Game memory) {
+    return games[externalId];
+  }
+
+  /// @notice Get the data of the current active games
+  function getActiveGames() public view returns(Game[] memory) {
+    Game[] memory activeGamesArray = new Game[](activeGames.length);
+    for (uint256 i = 0; i < activeGames.length; i++) {
+      activeGamesArray[i] = games[activeGames[i]];
+    }
+    return activeGamesArray;
+  }
+
+  function readyToBeResolved(uint256 externalId) public view returns (bool) {
+    return games[externalId].timestamp < block.timestamp;
+  }
+
+  // ---------------------------------- CHAINLINK AUTOMATION -------------------------------------------------
+
+  /// @notice Checks if any games are ready to be resovled
+  function checkUpkeep(bytes memory) external view override returns (bool, bytes memory) {
+    // Gets all current games that to be resolved
+    Game[] memory activeGamesArray = getActiveGames();
+    // Check if any game is ready to be resolved and have not already been requested
+    for (uint256 i = 0; i < activeGamesArray.length; i++) {
+      uint256 externalId = activeGamesArray[i].externalId;
+      if (readyToBeResolved(externalId) && pendingRequests[externalId] == 0) {
+        // Signal that a game is ready to be resolved to Chainlink Automation
+        return (true, abi.encodePacked(externalId));
+      }
+    }
+    return (false, "");
+  }
+  
+  /// @notice Request the result of a game
+  function performUpkeep(bytes calldata data) external override {
+    uint256 externalId = abi.decode(data, (uint256));
+    _requestResolve(externalId);
   }
 }

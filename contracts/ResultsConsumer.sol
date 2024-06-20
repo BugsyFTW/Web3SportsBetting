@@ -8,7 +8,7 @@ import { Strings } from "@openzeppelin/contracts/utils/Strings.sol";
 abstract contract ResultsConsumer is FunctionsClient {
   using FunctionsRequest for FunctionsRequest.Request;
 
-  /// @notice The gas limit for the sports API request callback
+  /// @notice The gas limit for the Football API request callback
   uint32 private constant GAS_LIMIT = 250000;
 
   // The source code for API request
@@ -20,16 +20,11 @@ abstract contract ResultsConsumer is FunctionsClient {
   // The ID of the Chainlink oracle network;
   bytes32 public donId;
 
-  mapping(bytes32 => PendingRequest) private pending;
+  mapping(bytes32 => uint256) private pending;
 
-  struct PendingRequest {
-    uint256 sportId;
-    uint256 externalId;
-  }
-
-  event RequestedResult(uint256 sportId, uint256 externalId, bytes32 requestId);
+  event RequestedResult(uint256 externalId, bytes32 requestId);
   event ResultReceived(bytes32 requestId, bytes response);
-  event RequestFailed(bytes response);  
+  event RequestFailed(bytes response);
   event NoPendingRequest();
 
   constructor(
@@ -45,27 +40,25 @@ abstract contract ResultsConsumer is FunctionsClient {
     secrets = _secrets;
   }
 
-  /// @notice Requests a sports result
-  /// @param sportId The ID of the sport
-  /// @param externalId The ID of the game on the external sports API
+  /// @notice Requests a Match result
   /// @return requestId The Chainlink Functions request ID
-  function _requestResult(uint256 sportId, uint256 externalId) internal returns (bytes32 requestId) {
+  function _requestResult(uint256 externalId) internal returns (bytes32 requestId) {
     // Prepare the arguments for the Chainlink Functions request
-    string[] memory args = new string[](2);
-    args[0] = Strings.toString(sportId);
+    string[] memory args = new string[](1);
     args[1] = Strings.toString(externalId);
+
     // Send the Chainlink Functions request
-    requestId = _sendRequest(args);
+    requestId = _executeRequest(args);
 
     // Store the request and the associated data for the callback
-    pending[requestId] = PendingRequest({sportId: sportId, externalId: externalId});
-    emit RequestedResult(sportId, externalId, requestId);
+    pending[requestId] = externalId;
+    emit RequestedResult(externalId, requestId);
   }
 
   /// @notice Sends a Chainlink Functions request
   /// @param args The arguments for the Chainlink Functions request
   /// @return requestId The Chainlink Functions request ID
-  function _sendRequest(string[] memory args) internal returns (bytes32 requestId) {
+  function _executeRequest(string[] memory args) internal returns (bytes32 requestId) {
     FunctionsRequest.Request memory request;
     request.initializeRequest(FunctionsRequest.Location.Inline, FunctionsRequest.CodeLanguage.JavaScript, source);
     if (secrets.length > 0) {
@@ -76,12 +69,10 @@ abstract contract ResultsConsumer is FunctionsClient {
     requestId = _sendRequest(request.encodeCBOR(), subscriptionId, GAS_LIMIT, donId);
   }
 
-  /// @notice Processes the result of a sports API request
-  /// @param sportId The ID of the sport
-  /// @param externalId The ID of the game on the external sports API
+  /// @notice Processes the result of a Football API request
   /// @param response The response from the Chainlink Functions request
   /// @dev This function must be implemented by the child contract
-  function _processResult(uint256 sportId, uint256 externalId, bytes memory response) internal virtual;
+  function _processResult(uint256 externalId, bytes memory response) internal virtual;
 
   /// @notice Receives the response to a Chainlink Functions request
   /// @param requestId The Chainlink Functions request ID
@@ -89,13 +80,15 @@ abstract contract ResultsConsumer is FunctionsClient {
   /// @param err The error from the Chainlink Functions request
   /// @dev This function is called by the oracle
   function fulfillRequest(bytes32 requestId, bytes memory response, bytes memory err) internal override {
-    PendingRequest memory request = pending[requestId];
+    uint256 externalId = pending[requestId];
+
     // Check if there is a sent request
-    if (request.sportId == 0) {
+    if (externalId == 0) {
       emit NoPendingRequest();
       return;
     }
     delete pending[requestId];
+    
     // Check if the Functions script failed
     if (err.length > 0) {
       emit RequestFailed(err);
@@ -104,6 +97,6 @@ abstract contract ResultsConsumer is FunctionsClient {
     emit ResultReceived(requestId, response);
 
     // Call the child contract to process the result
-    _processResult(request.sportId, request.externalId, response);
+    _processResult(externalId, response);
   }
 }
