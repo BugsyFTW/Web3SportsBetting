@@ -56,6 +56,7 @@ contract SportPrediction is ResultsConsumer, AutomationCompatibleInterface {
   event Predicted(address indexed user, uint256 indexed externalId, Result result, uint256 amount);
   event GameRegistered(uint256 indexed externalId);
   event GameResolved(uint256 indexed externalId, Result result);
+  event Claimed(address indexed user, uint256 indexed gameId, uint256 amount);
 
   error GameNotRegistered();
   error GameIsResolved();
@@ -65,6 +66,8 @@ contract SportPrediction is ResultsConsumer, AutomationCompatibleInterface {
   error TimestampInPast();
   error ResolveAlreadyRequested();
   error GameNotReadyToResolve();
+  error GameNotResolved();
+  error NothingToClaim();
 
   constructor(
     Config memory config
@@ -100,6 +103,37 @@ contract SportPrediction is ResultsConsumer, AutomationCompatibleInterface {
   function registerAndPredict(uint256 externalId, uint256 timestamp, Result result) external payable {
     _registerGame(externalId, timestamp);
     predict(externalId, result);
+  }
+
+  /// @notice Claim the winnings for a match
+  /// @dev Works for multiple predictions per user
+  function claim(uint256 externalId) external {
+    Game memory game = games[externalId];
+    address user = msg.sender;
+
+    if (!game.resolved) revert GameNotResolved();
+
+    uint256 totalWinnings = 0;
+    Prediction[] memory userPredictions = predictions[user][externalId];
+    for (uint256 i = 0; i < userPredictions.length; i++) {
+      Prediction memory prediction = userPredictions[i];
+      // Skip if prediction has already been claimed
+      if (prediction.claimed) continue;
+      if (game.result == Result.None) {
+        // For a draw, the user gets their tokens back
+        totalWinnings += prediction.ammount;
+      } else if (game.result == prediction.result) {
+        uint256 winnings = calculateWinnings(externalId, prediction.ammount, prediction.result);
+        totalWinnings += winnings;
+      }
+      predictions[user][externalId][i].claimed = true;
+    }
+
+    if (totalWinnings == 0) revert NothingToClaim();
+    
+    payable(user).transfer(totalWinnings);
+
+    emit Claimed(user, externalId, totalWinnings);
   }
 
   /// --------------------------------------------------------------------------------- INTERNAL ------------------------------------------------------------------------------------  
@@ -180,8 +214,34 @@ contract SportPrediction is ResultsConsumer, AutomationCompatibleInterface {
     return activeGamesArray;
   }
 
+  /// @notice Get the data of all user predictions for active games
+  function getActivePredictions(address user) external view returns (Prediction[] memory) {
+    uint256 userTotalPredictions = 0;
+    for (uint256 i = 0; i < activeGames.length; i++) {
+      userTotalPredictions += predictions[user][activeGames[i]].length;
+    }
+    uint256 index = 0;
+    Prediction[] memory userPredictions = new Prediction[](userTotalPredictions);
+    for (uint256 i = 0; i < activeGames.length; i++) {
+      Prediction[] memory gamePredictions = predictions[user][activeGames[i]];
+      for (uint256 j = 0; j < gamePredictions.length; j++) {
+        userPredictions[index] = gamePredictions[j];
+        index++;
+      }
+    }
+    return userPredictions;
+  }
+
   function readyToBeResolved(uint256 externalId) public view returns (bool) {
-    return games[externalId].timestamp < block.timestamp;
+    return games[externalId].timestamp + GAME_RESOLVE_DELAY < block.timestamp;
+  }
+
+  function calculateWinnings(uint256 externalId, uint256 wager, Result result) public view returns (uint256) {
+    Game memory game = games[externalId];
+    uint256 totalWager = game.homeWagerAmmount + game.awayWagerAmmout;
+    uint256 winnings = (wager + totalWager) / (result == Result.Home ? game.homeWagerAmmount : game.awayWagerAmmout);
+    
+    return winnings;
   }
 
   // ---------------------------------- CHAINLINK AUTOMATION -------------------------------------------------
