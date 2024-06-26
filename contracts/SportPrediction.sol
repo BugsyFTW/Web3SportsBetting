@@ -68,6 +68,7 @@ contract SportPrediction is ResultsConsumer, AutomationCompatibleInterface {
   error GameNotReadyToResolve();
   error GameNotResolved();
   error NothingToClaim();
+  error InsufficientValue();
 
   constructor(
     Config memory config
@@ -90,6 +91,7 @@ contract SportPrediction is ResultsConsumer, AutomationCompatibleInterface {
     if (game.externalId == 0) revert GameNotRegistered();
     if (game.resolved) revert GameIsResolved();
     if (game.timestamp < block.timestamp) revert GameAlreadyStarted();
+    if (wagerAmount <= 0) revert InsufficientValue();
 
     if (result == Result.Home) games[externalId].homeWagerAmount += wagerAmount;
     else if (result == Result.Away) games[externalId].awayWagerAmount += wagerAmount;
@@ -232,8 +234,48 @@ contract SportPrediction is ResultsConsumer, AutomationCompatibleInterface {
     return userPredictions;
   }
 
-  function readyToBeResolved(uint256 externalId) public view returns (bool) {
-    return games[externalId].timestamp + GAME_RESOLVE_DELAY < block.timestamp;
+  /// @notice Get the data of all user predictions for resolved games
+  /// @dev Improvements could be made, change the structure by flattening the double indexing mapping
+  /*
+  TO FUTURE SELF:
+  struct UserPrediction {
+    uint256 gameId;
+    Prediction prediction;
+  }
+
+  mapping(address => UserPrediction[]) private predictions;
+
+  Could also add the following:
+
+  mapping(uint256 => address[]) private gameToUser;
+
+  This mapping could track which users have made predictions on specific games, reducing the need to iterate over all users or games blindly.
+  */
+  function getPastPredictions(address user) external view returns (Prediction[] memory) {
+    uint256 totalPredictions = 0;
+    for (uint256 i = 0; i < resolvedGames.length; i++) {
+      totalPredictions += predictions[user][resolvedGames[i]].length;
+    }
+
+    Prediction[] memory userPredictions = new Prediction[](totalPredictions);
+    uint256 index = 0;
+    for (uint256 i = 0; i < resolvedGames.length; i++) {
+      Prediction[] storage gamePredictions = predictions[user][resolvedGames[i]];
+      for (uint256 j = 0; j < gamePredictions.length; j++) {
+        userPredictions[index++] = gamePredictions[j];
+      }
+    }
+    return userPredictions;
+  }
+
+  /// @notice Chekcs if a user predicted the game correctly
+  /// @dev The game must be resolved
+  function isPredictionCorrect(address user, uint256 externalId, uint32 predictionIdx) external view returns (bool) {
+    Game memory game = games[externalId];
+    if (!game.resolved) return false;
+
+    Prediction memory prediction = predictions[user][externalId][predictionIdx];
+    return prediction.result == game.result;
   }
 
   function calculateWinnings(uint256 externalId, uint256 wager, Result result) public view returns (uint256) {
@@ -242,6 +284,10 @@ contract SportPrediction is ResultsConsumer, AutomationCompatibleInterface {
     uint256 winnings = (wager + totalWager) / (result == Result.Home ? game.homeWagerAmount : game.awayWagerAmount);
     
     return winnings;
+  }
+
+  function readyToBeResolved(uint256 externalId) public view returns (bool) {
+    return games[externalId].timestamp + GAME_RESOLVE_DELAY < block.timestamp;
   }
 
   // ---------------------------------- CHAINLINK AUTOMATION -------------------------------------------------

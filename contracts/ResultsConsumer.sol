@@ -45,7 +45,7 @@ abstract contract ResultsConsumer is FunctionsClient {
   function _requestResult(uint256 externalId) internal returns (bytes32 requestId) {
     // Prepare the arguments for the Chainlink Functions request
     string[] memory args = new string[](1);
-    args[1] = Strings.toString(externalId);
+    args[0] = Strings.toString(externalId);
 
     // Send the Chainlink Functions request
     requestId = _executeRequest(args);
