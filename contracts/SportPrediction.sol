@@ -34,8 +34,8 @@ contract SportPrediction is ResultsConsumer, AutomationCompatibleInterface {
   struct Game {
     uint256 externalId; // The ID of the game from the external api: Might need to change the type
     uint256 timestamp; // The timestamp of the game start time
-    uint256 homeWagerAmmount; // The total ammount of tokens wagared on the home team;
-    uint256 awayWagerAmmout; // The total ammount of tokens wagared on the away team;
+    uint256 homeWagerAmount; // The total ammount of tokens wagared on the home team;
+    uint256 awayWagerAmount; // The total ammount of tokens wagared on the away team;
     bool resolved; // Wether or no the game has finished and the result has been set
     Result result;
   }
@@ -91,8 +91,8 @@ contract SportPrediction is ResultsConsumer, AutomationCompatibleInterface {
     if (game.resolved) revert GameIsResolved();
     if (game.timestamp < block.timestamp) revert GameAlreadyStarted();
 
-    if (result == Result.Home) games[externalId].homeWagerAmmount += wagerAmount;
-    else if (result == Result.Away) games[externalId].awayWagerAmmout += wagerAmount;
+    if (result == Result.Home) games[externalId].homeWagerAmount += wagerAmount;
+    else if (result == Result.Away) games[externalId].awayWagerAmount += wagerAmount;
     else revert InvalidResult();
 
     predictions[msg.sender][externalId].push(Prediction(externalId, result, wagerAmount, false));
@@ -238,8 +238,8 @@ contract SportPrediction is ResultsConsumer, AutomationCompatibleInterface {
 
   function calculateWinnings(uint256 externalId, uint256 wager, Result result) public view returns (uint256) {
     Game memory game = games[externalId];
-    uint256 totalWager = game.homeWagerAmmount + game.awayWagerAmmout;
-    uint256 winnings = (wager + totalWager) / (result == Result.Home ? game.homeWagerAmmount : game.awayWagerAmmout);
+    uint256 totalWager = game.homeWagerAmount + game.awayWagerAmount;
+    uint256 winnings = (wager + totalWager) / (result == Result.Home ? game.homeWagerAmount : game.awayWagerAmount);
     
     return winnings;
   }
