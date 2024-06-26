@@ -58,7 +58,7 @@ abstract contract ResultsConsumer is FunctionsClient {
   /// @notice Sends a Chainlink Functions request
   /// @param args The arguments for the Chainlink Functions request
   /// @return requestId The Chainlink Functions request ID
-  function _executeRequest(string[] memory args) internal returns (bytes32 requestId) {
+  function _executeRequest(string[] memory args) private returns (bytes32 requestId) {
     FunctionsRequest.Request memory request;
     request.initializeRequest(FunctionsRequest.Location.Inline, FunctionsRequest.CodeLanguage.JavaScript, source);
     if (secrets.length > 0) {
@@ -66,7 +66,7 @@ abstract contract ResultsConsumer is FunctionsClient {
     }
     if (args.length > 0) request.setArgs(args);
 
-    requestId = _sendRequest(request.encodeCBOR(), subscriptionId, GAS_LIMIT, donId);
+    requestId = super._sendRequest(request.encodeCBOR(), subscriptionId, GAS_LIMIT, donId);
   }
 
   /// @notice Processes the result of a Football API request

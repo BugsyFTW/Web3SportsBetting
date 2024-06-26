@@ -182,7 +182,7 @@ contract SportPrediction is ResultsConsumer, AutomationCompatibleInterface {
 
     // Request the result of the game via ResultsConsumer contract
     // Store the Chainlink Functions request ID to prevent duplicate requests
-    pendingRequests[externalId] = _requestResult(game.externalId);
+    pendingRequests[externalId] = super._requestResult(game.externalId);
   }
 
   function _removeFromActiveGames(uint256 externalId) internal {
