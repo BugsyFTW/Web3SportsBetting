@@ -212,6 +212,48 @@ describe("SportPrediction Unit Test", async function () {
       });
     });
   });
+
+  describe("Resolve", () => {
+    it("should not be able to resolve before game finished", async () => {
+      await sportPrediction.registerAndPredict(externalId, startTime, result, { value: wager });
+
+      await expect(
+        resolveGame(sportPrediction, mockFunctionsOracle, externalId, result, startTimeDelay)
+      ).to.be.revertedWithCustomError(sportPrediction, "GameNotReadyToResolve");
+    });
+
+    context("when a game is resolved", () => {
+      let resolveTx: any;
+      
+      beforeEach(async () => {
+        await sportPrediction.registerAndPredict(externalId, startTime, result, { value: wager });
+        resolveTx = await resolveGame(sportPrediction, mockFunctionsOracle, externalId, result, delay);
+      });
+
+      it("should update game details", async () => {
+        const game = await sportPrediction.getGame(externalId);
+
+        expect(game.resolved).to.equal(true);
+        expect(game.result).to.equal(result);
+      });
+
+      it("should remove game from active list", async () => {
+        const activeList = await sportPrediction.getActiveGames();
+
+        expect(activeList.length).to.equal(0);
+      });
+
+      it("should not be able to resolve a game twice", async () => {
+        await expect(
+          resolveGame(sportPrediction, mockFunctionsOracle, externalId, result, delay)
+        ).to.be.revertedWithCustomError(sportPrediction, "GameIsResolved");
+      });
+
+      it("should emit GameResolved event", async () => {
+        await expect(resolveTx).to.emit(sportPrediction, "GameResolved");
+      });
+    });
+  });
 });
 
 async function resolveGame(contract: SportPrediction, oracleContract: MockFunctionsOracle, externalId: number, result: number, delay: number) {
